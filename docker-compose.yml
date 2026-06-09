@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  rag-agent:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - SECRET_KEY=your-super-secret-key-change-this
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DATABASE_URL=sqlite:///./rag_agent.db
+    volumes:
+      - ./chroma_db:/app/chroma_db
+      - ./rag_agent.db:/app/rag_agent.db
+    restart: unless-stopped
