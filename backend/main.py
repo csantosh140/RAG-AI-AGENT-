@@ -12,12 +12,16 @@ from dotenv import load_dotenv
 # Load .env from project root (parent of backend/)
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
-from .database import engine, get_db, Document, ChatSession, ChatMessage
-from .schemas import ChatMessageCreate, DocumentResponse
-from .services.retrieval import process_and_store_document, delete_document_chunks, reset_all_documents, search_topics
-from .services.agent import generate_chat_response, generate_quiz_response
-from .services.web_search import fetch_web_context
-from .services.image_gen import get_image_path, IMAGE_DIR
+# Import as absolute modules so the app can run both as `backend.main:app` and `main:app`.
+# This avoids `ImportError: attempted relative import with no known parent package`.
+from database import engine, get_db, Document, ChatSession, ChatMessage
+from schemas import ChatMessageCreate, DocumentResponse
+from services.retrieval import process_and_store_document, delete_document_chunks, reset_all_documents, search_topics
+from services.agent import generate_chat_response, generate_quiz_response
+from services.web_search import fetch_web_context
+from services.image_gen import get_image_path, IMAGE_DIR
+
+
 
 app = FastAPI(title="RAG AI Agent API")
 
@@ -36,6 +40,12 @@ app.add_middleware(
 def health_check(db: Session = Depends(get_db)):
     doc_count = db.query(Document).count()
     return {"status": "healthy", "document_count": doc_count}
+
+@app.get("/debug-key")
+def debug_key():
+    return {
+        "exists": bool(os.getenv("GEMINI_API_KEY"))
+    }
 
 @app.get("/api/documents/", response_model=List[DocumentResponse])
 def get_documents(db: Session = Depends(get_db)):
