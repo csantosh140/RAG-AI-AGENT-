@@ -1,3 +1,24 @@
+# Environment files
 .env
 **/.env
 .env.local
+
+# Databases
+*.db
+*.sqlite3
+
+# ChromaDB
+chroma_db/
+backend/chroma_db/
+
+# Generated files
+generated_images/
+backend/generated_images/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environments
+.venv/
+venv/
