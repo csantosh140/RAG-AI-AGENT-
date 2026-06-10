@@ -19,6 +19,7 @@ def generate_image(prompt: str, width: int = 1024, height: int = 1024) -> Option
     return generate_ai_photo(prompt, width, height)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+print("GEMINI_API_KEY exists:", bool(GEMINI_API_KEY))
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
