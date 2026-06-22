@@ -12,12 +12,17 @@ from dotenv import load_dotenv
 # Load .env from project root (parent of backend/)
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
-from database import engine, get_db, Document, ChatSession, ChatMessage
+# Import as absolute modules so the app can run both as `backend.main:app` and `main:app`.
+# This avoids `ImportError: attempted relative import with no known parent package`.
+from database import engine, get_db, Document, ChatSession, ChatMessage, User
 from schemas import ChatMessageCreate, DocumentResponse
 from services.retrieval import process_and_store_document, delete_document_chunks, reset_all_documents, search_topics
 from services.agent import generate_chat_response, generate_quiz_response
 from services.web_search import fetch_web_context
 from services.image_gen import get_image_path, IMAGE_DIR
+
+from core.security import get_current_user
+from api.routes import auth
 
 app = FastAPI(title="RAG AI Agent API")
 
@@ -30,19 +35,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):
     doc_count = db.query(Document).count()
     return {"status": "healthy", "document_count": doc_count}
 
+@app.get("/debug-key")
+def debug_key():
+    return {
+        "exists": bool(os.getenv("GEMINI_API_KEY"))
+    }
+
 @app.get("/api/documents/", response_model=List[DocumentResponse])
-def get_documents(db: Session = Depends(get_db)):
-    return db.query(Document).all()
+def get_documents(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return db.query(Document).filter(Document.user_id == current_user.id).all()
 
 @app.post("/api/documents/upload")
-async def upload_documents(files: List[UploadFile] = File(...), db: Session = Depends(get_db)):
+async def upload_documents(files: List[UploadFile] = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     uploaded_docs = []
     errors = []
     
@@ -56,7 +66,7 @@ async def upload_documents(files: List[UploadFile] = File(...), db: Session = De
             
             if chunks_count > 0:
                 # Store metadata in SQLite
-                new_doc = Document(doc_id=doc_id, filename=file.filename, total_chunks=chunks_count)
+                new_doc = Document(doc_id=doc_id, filename=file.filename, total_chunks=chunks_count, user_id=current_user.id)
                 db.add(new_doc)
                 uploaded_docs.append(file.filename)
             else:
@@ -69,17 +79,17 @@ async def upload_documents(files: List[UploadFile] = File(...), db: Session = De
     return {"documents": uploaded_docs, "errors": errors}
 
 @app.delete("/api/documents/reset")
-def reset_documents(db: Session = Depends(get_db)):
+def reset_documents(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     # Delete from sqlite
-    db.query(Document).delete()
+    db.query(Document).filter(Document.user_id == current_user.id).delete()
     db.commit()
     # Delete from chroma (simplified, ideally filter by user)
     reset_all_documents()
     return {"status": "success"}
 
 @app.delete("/api/documents/{doc_id}")
-def delete_document(doc_id: str, db: Session = Depends(get_db)):
-    doc = db.query(Document).filter(Document.doc_id == doc_id).first()
+def delete_document(doc_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    doc = db.query(Document).filter(Document.doc_id == doc_id, Document.user_id == current_user.id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     
@@ -92,17 +102,17 @@ def delete_document(doc_id: str, db: Session = Depends(get_db)):
     return {"status": "success"}
 
 @app.post("/api/chat/session")
-def create_chat_session(db: Session = Depends(get_db)):
-    session = ChatSession()
+def create_chat_session(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    session = ChatSession(user_id=current_user.id)
     db.add(session)
     db.commit()
     db.refresh(session)
     return {"session_id": session.session_id}
 
 @app.get("/api/chat/history")
-def get_all_chat_sessions(db: Session = Depends(get_db)):
+def get_all_chat_sessions(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Fetch all chat sessions from SQLite database with summary info."""
-    sessions = db.query(ChatSession).all()
+    sessions = db.query(ChatSession).filter(ChatSession.user_id == current_user.id).all()
     # Sort sessions by the latest message ID (most recent activity first)
     sessions = sorted(
         sessions,
@@ -138,9 +148,9 @@ def get_all_chat_sessions(db: Session = Depends(get_db)):
 
 
 @app.get("/api/chat/session/{session_id}")
-def get_chat_session_details(session_id: str, db: Session = Depends(get_db)):
+def get_chat_session_details(session_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Fetch details of a specific chat session including messages and full search history/context."""
-    session = db.query(ChatSession).filter(ChatSession.session_id == session_id).first()
+    session = db.query(ChatSession).filter(ChatSession.session_id == session_id, ChatSession.user_id == current_user.id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
@@ -172,9 +182,10 @@ def send_chat_message(
     session_id: str,
     message: ChatMessageCreate,
     web_search: bool = Query(default=True, description="Enable web search augmentation"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    session = db.query(ChatSession).filter(ChatSession.session_id == session_id).first()
+    session = db.query(ChatSession).filter(ChatSession.session_id == session_id, ChatSession.user_id == current_user.id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
@@ -195,8 +206,8 @@ def send_chat_message(
     )
 
 @app.delete("/api/chat/{session_id}")
-def delete_chat_session(session_id: str, db: Session = Depends(get_db)):
-    session = db.query(ChatSession).filter(ChatSession.session_id == session_id).first()
+def delete_chat_session(session_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    session = db.query(ChatSession).filter(ChatSession.session_id == session_id, ChatSession.user_id == current_user.id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
