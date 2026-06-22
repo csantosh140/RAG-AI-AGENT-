@@ -15,9 +15,16 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+
 class Document(Base):
     __tablename__ = "documents"
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     doc_id = Column(String, unique=True, default=lambda: str(uuid.uuid4()))
     filename = Column(String)
     total_chunks = Column(Integer, default=0)
@@ -25,6 +32,7 @@ class Document(Base):
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     session_id = Column(String, unique=True, default=lambda: str(uuid.uuid4()))
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
 
@@ -55,6 +63,27 @@ def run_migrations():
         columns = [col['name'] for col in inspector.get_columns('chat_messages')]
         
         with engine.begin() as conn:
+            if 'users' not in inspector.get_table_names():
+                try:
+                    conn.execute(text("CREATE TABLE users (id INTEGER NOT NULL PRIMARY KEY, username VARCHAR, hashed_password VARCHAR)"))
+                    conn.execute(text("CREATE UNIQUE INDEX ix_users_username ON users (username)"))
+                except Exception as e:
+                    print(f"Migration users error: {e}")
+                    
+            doc_cols = [col['name'] for col in inspector.get_columns('documents')]
+            if 'user_id' not in doc_cols:
+                try:
+                    conn.execute(text("ALTER TABLE documents ADD COLUMN user_id INTEGER REFERENCES users(id)"))
+                except Exception as e:
+                    pass
+                
+            sess_cols = [col['name'] for col in inspector.get_columns('chat_sessions')]
+            if 'user_id' not in sess_cols:
+                try:
+                    conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN user_id INTEGER REFERENCES users(id)"))
+                except Exception as e:
+                    pass
+
             if 'search_sources' not in columns:
                 try:
                     conn.execute(text("ALTER TABLE chat_messages ADD COLUMN search_sources TEXT"))
