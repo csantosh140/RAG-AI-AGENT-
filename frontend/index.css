@@ -25,9 +25,11 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
 html{height:100%}
+[hidden] { display: none !important; }
 
 body {
   height: 100vh;
+  height: 100dvh;
   display: flex;
   overflow: hidden;
   background: var(--bg);
@@ -47,6 +49,7 @@ body {
   width: var(--sw);
   min-width: var(--sw);
   height: 100vh;
+  height: 100dvh;
   background: var(--bg-s);
   border-right: 1px solid var(--border);
   display: flex;
@@ -245,6 +248,7 @@ body {
   flex: 1;
   min-width: 0;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -265,7 +269,7 @@ body {
   background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;
 }
 .header-sub{font-size:11px;color:var(--tm)}
-.header-actions{display:flex;gap:7px}
+.header-actions{display:flex;gap:7px;position:relative}
 .header-btn{
   background:none;border:1px solid var(--border);border-radius:7px;
   color:var(--t2);width:34px;height:34px;display:flex;align-items:center;
@@ -1080,16 +1084,113 @@ body {
   opacity: .7;
 }
 
+/* ══ DROPDOWN MENU FOR MOBILE ══ */
+#headerMoreBtn {
+  display: none;
+}
+
+.header-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--bg-e);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px;
+  min-width: 190px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 100;
+  animation: dropdownFadeIn 0.2s var(--ease);
+}
+
+@keyframes dropdownFadeIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  color: var(--t2);
+  font-size: 13px;
+  font-family: inherit;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--dur) var(--ease);
+  width: 100%;
+}
+
+.dropdown-item:hover {
+  background: var(--bg-hover);
+  color: var(--t1);
+}
+
+.dropdown-item.active {
+  background: rgba(34, 211, 165, 0.1);
+  color: var(--green);
+}
+
+.dropdown-item svg {
+  flex-shrink: 0;
+}
+
 /* ══ RESPONSIVE ══ */
 @media(max-width:768px){
-  .sidebar{position:fixed;top:0;left:0;height:100vh;transform:translateX(-100%);transition:transform var(--dur) var(--ease);width:var(--sw)!important;min-width:var(--sw)!important;z-index:200}
+  .sidebar{position:fixed;top:0;left:0;height:100vh;transform:translateX(-100%);transition:transform var(--dur) var(--ease);width:min(var(--sw), 85vw)!important;min-width:min(var(--sw), 85vw)!important;z-index:200;box-shadow: 10px 0 30px rgba(0,0,0,0.5);}
   .sidebar.mobile-open{transform:translateX(0)}
   .mobile-menu-btn{display:flex}
-  .welcome-cards{grid-template-columns:1fr}
+  .welcome-title{font-size: 20px;}
+  .welcome-desc{font-size: 12px; margin-bottom: 16px; padding: 0 10px;}
+  .welcome-cards{grid-template-columns:1fr; gap: 8px;}
+  .chat-header{padding:10px 14px; gap: 8px;}
+  .header-actions{gap: 4px;}
+  .header-btn{width:30px; height:30px;}
+  .header-btn svg{width:15px; height:15px;}
+  .header-title{font-size: 14px;}
+  .header-sub{font-size: 10px;}
   .chat-area{padding:14px}
-  .search-area{padding:12px 14px 16px}
-  .message-body{max-width:90%}
+  .search-area{padding:10px 14px 14px;}
+  .search-bar{height:46px; padding: 0 4px 0 14px;}
+  .search-icon-left{display:none;}
+  .search-input{font-size: 14px;}
+  .search-submit{width:34px; height:34px;}
+  .search-submit svg{width:16px; height:16px;}
+  .search-attach-btn{width:34px; height:34px;}
+  .search-attach-btn svg{width:16px; height:16px;}
+  .message-body{max-width:92%}
+  .message-avatar{width:28px; height:28px; font-size:13px;}
   .gen-image-header { padding: 10px 12px; }
   .gen-image-badge { font-size: 9px; }
   .gen-image-title { font-size: 11px; }
+  .toast-container{right:10px; left:10px; bottom: 10px; display:flex; align-items:center;}
+  .toast{width:100%; max-width:100%;}
+  .modal{padding: 20px; max-width:90vw;}
+  
+  /* Mobile dropdown controls */
+  #headerMoreBtn {
+    display: flex;
+  }
+  #webSearchToggle, #generateQuizBtn, #generatePdfBtn, #clearChatBtn {
+    display: none !important;
+  }
+  
+  /* Welcome Screen Tweaks */
+  .welcome-icon {
+    width: 64px !important;
+    height: 64px !important;
+    border-radius: 16px !important;
+    margin-bottom: 12px !important;
+  }
+  .welcome-icon svg {
+    width: 36px !important;
+    height: 36px !important;
+  }
 }

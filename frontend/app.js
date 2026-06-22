@@ -258,7 +258,14 @@ function speakText(markdownText) {
 
 async function apiGet(path) {
   const headers = {};
+  const token = localStorage.getItem("token");
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  
   const res = await fetch(`${API}${path}`, { headers });
+  if (res.status === 401 && !path.includes("/health")) {
+    showAuthModal();
+    throw new Error("Unauthorized");
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || res.statusText);
@@ -270,6 +277,9 @@ async function apiGet(path) {
 async function apiPost(path, body, isJson = true) {
   const opts = { method: "POST" };
   opts.headers = {};
+  const token = localStorage.getItem("token");
+  if (token) opts.headers["Authorization"] = `Bearer ${token}`;
+
   if (isJson) {
     opts.headers["Content-Type"] = "application/json";
     opts.body = JSON.stringify(body);
@@ -277,6 +287,10 @@ async function apiPost(path, body, isJson = true) {
     opts.body = body; // FormData
   }
   const res = await fetch(`${API}${path}`, opts);
+  if (res.status === 401) {
+    showAuthModal();
+    throw new Error("Unauthorized");
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || res.statusText);
@@ -287,7 +301,14 @@ async function apiPost(path, body, isJson = true) {
 
 async function apiDelete(path) {
   const headers = {};
+  const token = localStorage.getItem("token");
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  
   const res = await fetch(`${API}${path}`, { method: "DELETE", headers });
+  if (res.status === 401) {
+    showAuthModal();
+    throw new Error("Unauthorized");
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || res.statusText);
@@ -401,6 +422,9 @@ async function uploadFiles(files) {
 
     await loadDocuments();
     await checkHealth();
+    if (window.innerWidth <= 768) {
+      els.sidebar.classList.remove("mobile-open");
+    }
   } catch (err) {
     clearInterval(timer);
     toast(`Upload failed: ${err.message}`, "error");
@@ -429,6 +453,9 @@ async function resetKnowledgeBase() {
     toast("Knowledge base reset", "success");
     await loadDocuments();
     await checkHealth();
+    if (window.innerWidth <= 768) {
+      els.sidebar.classList.remove("mobile-open");
+    }
   } catch (err) {
     toast(`Reset failed: ${err.message}`, "error");
   }
@@ -479,6 +506,9 @@ function renderChatHistory(history) {
     `;
     item.addEventListener("click", () => {
       loadChatSession(session.session_id);
+      if (window.innerWidth <= 768) {
+        els.sidebar.classList.remove("mobile-open");
+      }
     });
     item.querySelector(".chat-delete").addEventListener("click", (e) => {
       e.stopPropagation();
@@ -693,9 +723,13 @@ async function sendMessage() {
 
 async function streamResponse(text, loadingEl) {
   const webParam = state.webSearchEnabled ? 'true' : 'false';
+  const token = localStorage.getItem("token");
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  
   const res = await fetch(`${API}/api/chat/${state.sessionId}/message?web_search=${webParam}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: headers,
     body: JSON.stringify({ message: text }),
   });
 
@@ -1208,6 +1242,45 @@ function initEvents() {
     }
   });
 
+  // ── Header Actions Dropdown (Mobile) ──────────────────────────
+  const moreBtn = document.getElementById("headerMoreBtn");
+  const dropdown = document.getElementById("headerDropdown");
+  if (moreBtn && dropdown) {
+    moreBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropdown.hidden = !dropdown.hidden;
+    });
+
+    document.addEventListener("click", () => {
+      dropdown.hidden = true;
+    });
+
+    dropdown.addEventListener("click", (e) => {
+      e.stopPropagation();
+    });
+
+    document.getElementById("dropdownWebSearch")?.addEventListener("click", () => {
+      document.getElementById("webSearchToggle")?.click();
+      dropdown.hidden = true;
+    });
+
+    document.getElementById("dropdownQuiz")?.addEventListener("click", () => {
+      document.getElementById("generateQuizBtn")?.click();
+      dropdown.hidden = true;
+    });
+
+    document.getElementById("dropdownPdf")?.addEventListener("click", () => {
+      document.getElementById("generatePdfBtn")?.click();
+      dropdown.hidden = true;
+    });
+
+    document.getElementById("dropdownClear")?.addEventListener("click", () => {
+      document.getElementById("clearChatBtn")?.click();
+      dropdown.hidden = true;
+    });
+  }
+
   // ── Web Search Toggle ─────────────────────────────────────────
   if (els.webSearchToggle) {
     els.webSearchToggle.addEventListener("click", () => {
@@ -1216,6 +1289,12 @@ function initEvents() {
       els.webSearchToggle.title = state.webSearchEnabled
         ? "Web Search: ON — Click to toggle"
         : "Web Search: OFF — Click to toggle";
+      
+      const dropWeb = document.getElementById("dropdownWebSearch");
+      if (dropWeb) {
+        dropWeb.classList.toggle("active", state.webSearchEnabled);
+      }
+      
       toast(
         state.webSearchEnabled
           ? "🌐 Web search enabled — AI will augment answers with live web data"
@@ -1232,6 +1311,9 @@ function initEvents() {
     els.welcomeScreen.hidden = false;
     toast("New conversation started", "info");
     await loadChatHistory();
+    if (window.innerWidth <= 768) {
+      els.sidebar.classList.remove("mobile-open");
+    }
   });
 
   // ── Clear chat ────────────────────────────────────────────────
@@ -1781,4 +1863,83 @@ async function initApp() {
   console.log("RAG AI Agent — Frontend initialised ✓");
 }
 
-document.addEventListener("DOMContentLoaded", init);
+let isLoginMode = true;
+function showAuthModal() {
+  const modal = document.getElementById("authModal");
+  if (modal) modal.hidden = false;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const authModal = document.getElementById("authModal");
+  const authToggleBtn = document.getElementById("authToggleBtn");
+  const authSubmitBtn = document.getElementById("authSubmitBtn");
+  const authTitle = document.getElementById("authTitle");
+  const authSub = document.getElementById("authSub");
+  const logoutBtn = document.getElementById("logoutBtn");
+  
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+      localStorage.removeItem("token");
+      location.reload();
+    });
+  }
+
+  if (authToggleBtn) {
+    authToggleBtn.addEventListener("click", () => {
+      isLoginMode = !isLoginMode;
+      authTitle.textContent = isLoginMode ? "Login" : "Register";
+      authSub.textContent = isLoginMode ? "Sign in to access your agent" : "Create a new account";
+      authSubmitBtn.textContent = isLoginMode ? "Login" : "Register";
+      authToggleBtn.textContent = isLoginMode ? "Need an account? Register" : "Already have an account? Login";
+    });
+  }
+
+  if (authSubmitBtn) {
+    authSubmitBtn.addEventListener("click", async () => {
+      const u = document.getElementById("authUsername").value.trim();
+      const p = document.getElementById("authPassword").value.trim();
+      if (!u || !p) { toast("Enter username and password", "error"); return; }
+      
+      try {
+        if (isLoginMode) {
+          const formData = new URLSearchParams();
+          formData.append("username", u);
+          formData.append("password", p);
+          
+          const res = await fetch(`${API}/api/auth/token`, {
+            method: "POST",
+            headers: {"Content-Type": "application/x-www-form-urlencoded"},
+            body: formData
+          });
+          if (!res.ok) throw new Error("Invalid credentials");
+          const data = await res.json();
+          localStorage.setItem("token", data.access_token);
+          authModal.hidden = true;
+          toast("Logged in successfully", "success");
+          initApp();
+        } else {
+          const res = await fetch(`${API}/api/auth/register`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({username: u, password: p})
+          });
+          if (!res.ok) {
+              const err = await res.json();
+              throw new Error(err.detail || "Registration failed");
+          }
+          toast("Registered successfully! Please log in.", "success");
+          authToggleBtn.click(); // switch to login
+        }
+      } catch (e) {
+        toast(e.message, "error");
+      }
+    });
+  }
+  
+  // Check auth on load
+  if (!localStorage.getItem("token")) {
+    showAuthModal();
+  } else {
+    init();
+  }
+});
